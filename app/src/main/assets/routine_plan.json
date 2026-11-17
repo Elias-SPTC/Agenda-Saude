@@ -1,0 +1,56 @@
+[
+  {
+    "id": "1",
+    "title": "Em Jejum / Pré-café",
+    "timeSlot": "06:00 - 08:00",
+    "description": "Beba 1 colher de sopa de vinagre de maçã diluída em 200 ml de água. Use canudo ou enxágue a boca para proteger os dentes.",
+    "category": "Jejum",
+    "startHour": 6,
+    "endHour": 8
+  },
+  {
+    "id": "2",
+    "title": "Café da Manhã",
+    "timeSlot": "08:00 - 10:30",
+    "description": "Misture 1 a 2 colheres de sopa de linhaça moída em iogurte natural, frutas ou aveia. Se comer ovos mexidos, tempere com açafrão-da-terra, uma pitada de pimenta-do-reino e um fio de azeite.",
+    "category": "Café da Manhã",
+    "startHour": 8,
+    "endHour": 11
+  },
+  {
+    "id": "3",
+    "title": "Pré-Almoço",
+    "timeSlot": "11:30 - 12:00",
+    "description": "Repita o vinagre de maçã diluído em água (10 a 15 min antes) se a refeição tiver arroz, massas ou batata.",
+    "category": "Pré-Almoço",
+    "startHour": 11,
+    "endHour": 12
+  },
+  {
+    "id": "4",
+    "title": "Almoço",
+    "timeSlot": "12:00 - 14:00",
+    "description": "Comece pela salada regada com azeite e salpique 1 colher de chá de cominho negro levemente triturado. Use o cominho comum e o açafrão-da-terra no tempero das carnes ou legumes.",
+    "category": "Almoço",
+    "startHour": 12,
+    "endHour": 15
+  },
+  {
+    "id": "5",
+    "title": "Lanche da Tarde",
+    "timeSlot": "15:00 - 17:30",
+    "description": "Um punhado pequeno de oleaginosas (como pistache ou nozes), que trazem gorduras boas e saciedade sem elevar a insulina.",
+    "category": "Lanche",
+    "startHour": 15,
+    "endHour": 18
+  },
+  {
+    "id": "6",
+    "title": "Jantar",
+    "timeSlot": "19:00 - 21:30",
+    "description": "Sopa de legumes, omelete ou proteínas grelhadas finalizadas com o mix de linhaça moída e cominho. Evite carboidratos refinados à noite para manter a insulina baixa durante o sono.",
+    "category": "Jantar",
+    "startHour": 19,
+    "endHour": 23
+  }
+]
