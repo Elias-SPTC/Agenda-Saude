@@ -16,7 +16,7 @@ object RoutineRepository {
     private val knownKeywords = listOf(
         "vinagre de maçã", "cominho negro", "açafrão-da-terra",
         "pimenta-do-reino", "oleaginosas", "sopa de legumes", "iogurte natural",
-        "linhaça", "pistache", "nozes", "omelete", "psyllium",
+        "linhaça", "pistache", "nozes", "omelete",
         "cominho", "açafrão", "azeite", "chia", "magnésio", "melatonina",
         "triptofano", "vitamina c", "whey", "creatina", "canela", "gengibre",
         "cromo", "aveia"
@@ -39,13 +39,32 @@ object RoutineRepository {
         return found.toList()
     }
 
+    /**
+     * Sanitizes any orphaned/truncated phrases in loaded descriptions.
+     */
+    fun sanitizeLoadedDescription(description: String): String {
+        var desc = description
+        desc = desc.replace(Regex("(?i)\\bInclui(\\s+[A-Za-zÀ-ú0-9_\\-]+)*(\\s+para otimização metabólica\\.?)?"), "").trim()
+        desc = desc.replace(Regex("(?i)para otimização metabólica\\.?"), "").trim()
+        desc = desc.replace(Regex("(?i)\\bCloreto\\s+de(\\s+magnésio)?\\b"), "").trim()
+
+        desc = desc.replace(Regex("\\s*,\\s*$"), ".")
+        desc = desc.replace(Regex("\\s+\\."), ".")
+        desc = desc.replace(Regex("\\s+"), " ").trim()
+
+        if (desc.isNotEmpty() && !desc.endsWith(".") && !desc.endsWith("?") && !desc.endsWith("!")) {
+            desc += "."
+        }
+        return desc
+    }
+
     fun getDefaultRecommendations(): List<Recommendation> {
         val rawList = listOf(
             Recommendation(
                 id = "1",
                 title = "Em Jejum / Pré-café",
                 timeSlot = "06:00 - 08:00",
-                description = "Beba 1 colher de sopa de vinagre de maçã diluída em 200 ml de água. Use canudo ou enxágue a boca para proteger os dentes.",
+                description = "",
                 category = "Jejum",
                 startHour = 6,
                 endHour = 8,
@@ -55,7 +74,7 @@ object RoutineRepository {
                 id = "2",
                 title = "Café da Manhã",
                 timeSlot = "08:00 - 10:30",
-                description = "Misture 1 a 2 colheres de sopa de linhaça moída em iogurte natural, frutas ou aveia. Se comer ovos mexidos, tempere com açafrão-da-terra, uma pitada de pimenta-do-reino e um fio de azeite.",
+                description = "",
                 category = "Café da Manhã",
                 startHour = 8,
                 endHour = 11,
@@ -65,7 +84,7 @@ object RoutineRepository {
                 id = "3",
                 title = "Pré-Almoço",
                 timeSlot = "11:30 - 12:00",
-                description = "Repita o vinagre de maçã diluído em água (10 a 15 min antes) se a refeição tiver arroz, massas ou batata.",
+                description = "",
                 category = "Pré-Almoço",
                 startHour = 11,
                 endHour = 12,
@@ -75,7 +94,7 @@ object RoutineRepository {
                 id = "4",
                 title = "Almoço",
                 timeSlot = "12:00 - 14:00",
-                description = "Comece pela salada regada com azeite e salpique 1 colher de chá de cominho negro levemente triturado. Use o cominho comum e o açafrão-da-terra no tempero das carnes ou legumes.",
+                description = "",
                 category = "Almoço",
                 startHour = 12,
                 endHour = 15,
@@ -85,7 +104,7 @@ object RoutineRepository {
                 id = "5",
                 title = "Lanche da Tarde",
                 timeSlot = "15:00 - 17:30",
-                description = "Um punhado pequeno de oleaginosas (como pistache ou nozes), que trazem gorduras boas e saciedade sem elevar a insulina.",
+                description = "",
                 category = "Lanche",
                 startHour = 15,
                 endHour = 18,
@@ -95,7 +114,7 @@ object RoutineRepository {
                 id = "6",
                 title = "Jantar",
                 timeSlot = "19:00 - 21:30",
-                description = "Sopa de legumes, omelete ou proteínas grelhadas finalizadas com o mix de linhaça moída e cominho. Evite carboidratos refinados à noite para manter a insulina baixa durante o sono.",
+                description = "",
                 category = "Jantar",
                 startHour = 19,
                 endHour = 23,
@@ -104,8 +123,10 @@ object RoutineRepository {
         )
 
         return rawList.map { rec ->
-            rec.copy(components = extractIngredientsFromText(rec.description, rec.components))
-        }.sortedBy { it.startHour }
+            val extracted = extractIngredientsFromText(rec.description, rec.components)
+            val synthesizedDesc = RoutineAiSynthesizer.synthesizeDescription(rec.title, extracted)
+            rec.copy(description = synthesizedDesc, components = extracted)
+        }
     }
 
     fun loadRecommendations(context: Context): List<Recommendation> {
@@ -114,19 +135,18 @@ object RoutineRepository {
             try {
                 val jsonString = localFile.readText()
                 val parsed = parseJsonRecommendations(jsonString)
-                if (parsed.isNotEmpty()) return parsed.sortedBy { it.startHour }
+                if (parsed.isNotEmpty()) return parsed
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-        return loadRecommendationsFromAssets(context).sortedBy { it.startHour }
+        return loadRecommendationsFromAssets(context)
     }
 
     fun saveRecommendations(context: Context, recommendations: List<Recommendation>) {
         try {
             val jsonArray = JSONArray()
-            val sorted = recommendations.sortedBy { it.startHour }
-            for (rec in sorted) {
+            for (rec in recommendations) {
                 val obj = JSONObject().apply {
                     put("id", rec.id)
                     put("title", rec.title)
@@ -162,7 +182,7 @@ object RoutineRepository {
         return try {
             val inputStream = context.assets.open(fileName)
             val jsonString = InputStreamReader(inputStream).use { it.readText() }
-            parseJsonRecommendations(jsonString).sortedBy { it.startHour }
+            parseJsonRecommendations(jsonString)
         } catch (e: Exception) {
             e.printStackTrace()
             getDefaultRecommendations()
@@ -175,34 +195,46 @@ object RoutineRepository {
             val jsonArray = JSONArray(jsonString.trim())
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val desc = obj.optString("description", "")
+                val title = obj.getString("title")
                 val explicit = mutableListOf<String>()
                 val compArray = obj.optJSONArray("components")
+                val isSavedUserPlan = compArray != null
+
                 if (compArray != null) {
                     for (j in 0 until compArray.length()) {
                         explicit.add(compArray.getString(j))
                     }
                 }
-                val extractedComponents = extractIngredientsFromText(desc, explicit)
+
+                // If loading saved user plan state, explicit components array in JSON is the absolute authority.
+                // Do NOT re-run keyword extractor on text which would resurrect eliminated ingredients.
+                val finalComponents = if (isSavedUserPlan) {
+                    explicit
+                } else {
+                    val desc = obj.optString("description", "")
+                    extractIngredientsFromText(desc, explicit)
+                }
+
+                val synthesizedDesc = RoutineAiSynthesizer.synthesizeDescription(title, finalComponents)
 
                 list.add(
                     Recommendation(
                         id = obj.getString("id"),
-                        title = obj.getString("title"),
+                        title = title,
                         timeSlot = obj.getString("timeSlot"),
-                        description = desc,
+                        description = synthesizedDesc,
                         category = obj.getString("category"),
                         startHour = obj.getInt("startHour"),
                         endHour = obj.getInt("endHour"),
                         isCompleted = obj.optBoolean("isCompleted", false),
-                        components = extractedComponents
+                        components = finalComponents
                     )
                 )
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return if (list.isNotEmpty()) list.sortedBy { it.startHour } else getDefaultRecommendations()
+        return if (list.isNotEmpty()) list else getDefaultRecommendations()
     }
 
     fun parsePlainTextRecommendations(text: String): List<Recommendation> {
@@ -241,13 +273,14 @@ object RoutineRepository {
             }
 
             val extractedComponents = extractIngredientsFromText(description)
+            val synthesizedDesc = RoutineAiSynthesizer.synthesizeDescription(title, extractedComponents)
 
             list.add(
                 Recommendation(
                     id = idCounter.toString(),
                     title = title,
                     timeSlot = timeSlot,
-                    description = description,
+                    description = synthesizedDesc,
                     category = title,
                     startHour = startHour,
                     endHour = endHour,
@@ -258,6 +291,6 @@ object RoutineRepository {
             idCounter++
         }
 
-        return if (list.isNotEmpty()) list.sortedBy { it.startHour } else getDefaultRecommendations()
+        return if (list.isNotEmpty()) list else getDefaultRecommendations()
     }
 }

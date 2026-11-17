@@ -8,11 +8,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +32,14 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
     val errorMessage by viewModel.errorMessage.collectAsState()
     val tempRemovedMap by viewModel.tempRemovedIngredients.collectAsState()
 
-    val currentTime = remember { LocalTime.now() }
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            currentTime = LocalTime.now()
+        }
+    }
+
     val currentRecommendation = remember(recommendations, currentTime) {
         viewModel.getCurrentRecommendation(currentTime)
     }
@@ -176,7 +182,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                     recommendation = item,
                     tempRemovedIngredients = tempRemovedMap[item.id] ?: emptySet(),
                     isCurrent = item.id == currentRecommendation?.id,
-                    onToggleComplete = { viewModel.toggleCompletion(item.id) },
                     onTempRemoveIngredient = { ing -> viewModel.tempRemoveIngredient(item.id, ing) }
                 )
             }
@@ -337,7 +342,10 @@ fun CurrentRecommendationCard(
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = if (recommendation.isCompleted)
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+            else
+                MaterialTheme.colorScheme.secondaryContainer
         ),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -366,6 +374,15 @@ fun CurrentRecommendationCard(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         fontWeight = FontWeight.Bold
                     )
+                    if (recommendation.isCompleted) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Concluído",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
                 Badge(
                     containerColor = MaterialTheme.colorScheme.secondary,
@@ -430,12 +447,13 @@ fun CurrentRecommendationCard(
                 ),
                 modifier = Modifier.align(Alignment.End)
             ) {
-                Icon(
-                    imageVector = if (recommendation.isCompleted) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = if (recommendation.isCompleted) "CONCLUÍDO" else "Marcar como Feito")
+                if (recommendation.isCompleted) {
+                    Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Concluído")
+                } else {
+                    Text(text = "Marcar como feito")
+                }
             }
         }
     }
@@ -447,7 +465,6 @@ fun RecommendationItemRow(
     recommendation: Recommendation,
     tempRemovedIngredients: Set<String>,
     isCurrent: Boolean,
-    onToggleComplete: () -> Unit,
     onTempRemoveIngredient: (String) -> Unit
 ) {
     val visibleComponents = recommendation.components.filter { it !in tempRemovedIngredients }
@@ -455,36 +472,27 @@ fun RecommendationItemRow(
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = when {
+                recommendation.isCompleted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                isCurrent -> MaterialTheme.colorScheme.surfaceVariant
+                else -> MaterialTheme.colorScheme.surface
+            }
         ),
         border = if (isCurrent) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            IconButton(onClick = onToggleComplete) {
-                Icon(
-                    imageVector = if (recommendation.isCompleted) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
-                    contentDescription = "Concluir",
-                    tint = if (recommendation.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = recommendation.title,
                         style = MaterialTheme.typography.titleMedium,
@@ -494,41 +502,50 @@ fun RecommendationItemRow(
                         else
                             MaterialTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = recommendation.timeSlot,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    if (recommendation.isCompleted) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Concluído",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
-                    text = cleanedDescription,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    text = recommendation.timeSlot,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
+            }
 
-                // Ingredient Chips for momentary removal on 'x'
-                if (visibleComponents.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        visibleComponents.forEach { ing ->
-                            SuggestionChip(
-                                onClick = { onTempRemoveIngredient(ing) },
-                                label = { Text(ing, style = MaterialTheme.typography.labelSmall) },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remover momentaneamente $ing",
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                }
-                            )
-                        }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = cleanedDescription,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+
+            // Ingredient Chips for momentary removal on 'x'
+            if (visibleComponents.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    visibleComponents.forEach { ing ->
+                        SuggestionChip(
+                            onClick = { onTempRemoveIngredient(ing) },
+                            label = { Text(ing, style = MaterialTheme.typography.labelSmall) },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remover momentaneamente $ing",
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        )
                     }
                 }
             }

@@ -2,7 +2,7 @@ package com.example.agenda_saude.ui.routine
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import com.example.agenda_saude.data.RoutineAnalyzer
+import com.example.agenda_saude.data.RoutineAiSynthesizer
 import com.example.agenda_saude.data.RoutineRepository
 import com.example.agenda_saude.model.Recommendation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,9 +41,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Adiciona um ingrediente de forma permanente.
-     * Se houver uma etapa compatível existente, o ingrediente é incorporado a ela.
-     * Caso contrário (ou se exigir um horário/janela distinta), uma nova etapa cronológica é criada e incorporada permanentemente.
+     * Adiciona um ingrediente de forma permanente integrando-o à etapa cronológica correspondente
+     * e sintetizando dinamicamente um novo texto coerente baseado nas propriedades e cronobiologia.
      */
     fun addIngredientOrPlan(input: String) {
         if (input.isBlank()) return
@@ -57,43 +56,33 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
 
         val query = input.lowercase(Locale.getDefault()).trim()
 
-        // Determine if it fits an existing structural stage or warrants a new dedicated chronobiological stage
         val targetCategory = when {
             query.contains("chia") || query.contains("linhaça") || query.contains("aveia") || query.contains("whey") || query.contains("psyllium") || query.contains("fibra") -> "Café da Manhã"
             query.contains("magnésio") || query.contains("melatonina") || query.contains("triptofano") || query.contains("chá") -> "Jantar"
             query.contains("cominho") || query.contains("açafrão") || query.contains("azeite") || query.contains("pimenta") || query.contains("sal") -> "Almoço"
             query.contains("vinagre") || query.contains("cromo") || query.contains("canela") || query.contains("gengibre") -> "Pré-Almoço"
             query.contains("nozes") || query.contains("pistache") || query.contains("oleaginosas") || query.contains("fruta") -> "Lanche da Tarde"
-            else -> null // If no standard category matches, create a dedicated new stage via RoutineAnalyzer!
+            else -> "Lanche da Tarde"
         }
 
         _recommendations.update { currentList ->
-            val newList = if (targetCategory != null) {
-                // Incorporate into existing stage
-                currentList.map { item ->
-                    if (item.category.contains(targetCategory, ignoreCase = true) || item.title.contains(targetCategory, ignoreCase = true)) {
-                        if (!item.components.contains(formattedName)) {
-                            val updatedComponents = item.components + formattedName
-                            val updatedDescription = "${item.description} Inclui $formattedName para otimização metabólica."
-                            item.copy(components = updatedComponents, description = updatedDescription)
-                        } else {
-                            item
-                        }
+            val newList = currentList.map { item ->
+                if (item.category.contains(targetCategory, ignoreCase = true) || item.title.contains(targetCategory, ignoreCase = true)) {
+                    if (!item.components.contains(formattedName)) {
+                        val updatedComponents = item.components + formattedName
+                        // Synthesize coherent description dynamically based on active ingredients and chronobiology
+                        val updatedDescription = RoutineAiSynthesizer.synthesizeDescription(item.title, updatedComponents)
+                        item.copy(components = updatedComponents, description = updatedDescription)
                     } else {
                         item
                     }
+                } else {
+                    item
                 }
-            } else {
-                // Create a new permanent chronobiological stage for this unique ingredient/plan
-                val newItem = RoutineAnalyzer.analyzeAndCreateRecommendation(input, currentList.size)
-                currentList + newItem
             }
 
-            // Automatically clean up any stages that became empty (safety check)
-            val cleanedList = newList.filter { it.components.isNotEmpty() }
-
-            RoutineRepository.saveRecommendations(getApplication(), cleanedList)
-            cleanedList
+            RoutineRepository.saveRecommendations(getApplication(), newList)
+            newList
         }
     }
 
@@ -108,21 +97,19 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Elimina um ingrediente de forma definitiva do plano global (banco de dados local).
-     * Se a etapa ficar sem nenhum ingrediente remanescente, ela é eliminada automaticamente do aplicativo.
+     * Elimina um ingrediente de forma definitiva do plano global e resintetiza o texto coerente da etapa.
      */
     fun removeIngredient(ingredientName: String) {
         _recommendations.update { currentList ->
             val updatedList = currentList.mapNotNull { item ->
                 if (item.components.any { it.equals(ingredientName, ignoreCase = true) }) {
                     val newComponents = item.components.filter { !it.equals(ingredientName, ignoreCase = true) }
-                    val cleanDesc = sanitizeDescriptionPermanently(item.description, ingredientName)
 
-                    // Automatically eliminate stage if it has zero ingredients remaining in the database
                     if (newComponents.isEmpty()) {
-                        null // Eliminate stage automatically
+                        null
                     } else {
-                        item.copy(components = newComponents, description = cleanDesc)
+                        val updatedDescription = RoutineAiSynthesizer.synthesizeDescription(item.title, newComponents)
+                        item.copy(components = newComponents, description = updatedDescription)
                     }
                 } else {
                     item
@@ -135,24 +122,6 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         _tempRemovedIngredients.update { map ->
             map.mapValues { (_, set) -> set.filter { !it.equals(ingredientName, ignoreCase = true) }.toSet() }
         }
-    }
-
-    private fun sanitizeDescriptionPermanently(description: String, ingredient: String): String {
-        var cleaned = description
-        val regex = Regex("(?i)\\b${Regex.escape(ingredient)}\\b")
-        cleaned = cleaned.replace(regex, "")
-
-        cleaned = cleaned.replace(Regex("(?i)\\b(e|com|de)\\s*,"), ",")
-        cleaned = cleaned.replace(Regex("(?i)\\b(e|com|de)\\s*\\."), ".")
-        cleaned = cleaned.replace(Regex("\\s*,\\s*,"), ",")
-        cleaned = cleaned.replace(Regex("\\s+\\."), ".")
-        cleaned = cleaned.replace(Regex("\\s+e\\s+e\\s+"), " e ")
-        cleaned = cleaned.replace(Regex("\\s+"), " ").trim()
-
-        if (cleaned.isNotEmpty()) {
-            cleaned = cleaned.replaceFirstChar { it.uppercase(Locale.getDefault()) }
-        }
-        return if (cleaned.isNotBlank()) cleaned else description
     }
 
     fun getAllActiveIngredients(): List<String> {
