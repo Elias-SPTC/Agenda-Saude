@@ -19,11 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.agenda_saude.data.IngredientInfo
+import com.example.agenda_saude.data.IngredientKnowledgeBase
 import com.example.agenda_saude.data.RoutineAiRefiner
 import com.example.agenda_saude.model.Recommendation
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +56,8 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
     var ingredientInput by remember { mutableStateOf("") }
 
     var showRemoveIngredientDialog by remember { mutableStateOf(false) }
+    var showIngredientsListDialog by remember { mutableStateOf(false) }
+    var selectedIngredientForInfo by remember { mutableStateOf<IngredientInfo?>(null) }
 
     // Warning dialog for duplicate ingredients
     if (errorMessage != null) {
@@ -94,6 +97,13 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Lista de Ingredientes") },
+                            onClick = {
+                                showMenu = false
+                                showIngredientsListDialog = true
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Adicionar Ingrediente") },
                             onClick = {
@@ -138,7 +148,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
             )
         }
     ) { innerPadding ->
-        // Filter out recommendations whose components are ALL temporarily removed (momentarily hidden)
         val visibleRecommendations = recommendations.filter { rec ->
             val visibleComps = rec.components.filter { it !in (tempRemovedMap[rec.id] ?: emptySet()) }
             rec.components.isEmpty() || visibleComps.isNotEmpty()
@@ -156,7 +165,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // Current Recommendation Banner / Card (Momentarily hidden if all components removed)
             if (currentRecommendation != null && currentVisible.isNotEmpty()) {
                 item(key = "current_${currentRecommendation.id}") {
                     CurrentRecommendationCard(
@@ -185,6 +193,118 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                     onTempRemoveIngredient = { ing -> viewModel.tempRemoveIngredient(item.id, ing) }
                 )
             }
+        }
+
+        // Dialog for Ingredients Catalog / Knowledge Base List
+        if (showIngredientsListDialog) {
+            val activeIngredients = viewModel.getAllActiveIngredients()
+            AlertDialog(
+                onDismissRequest = { showIngredientsListDialog = false },
+                title = { Text("Lista de Ingredientes Ativos") },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        if (activeIngredients.isEmpty()) {
+                            Text("Não há ingredientes ativos no plano atual.", style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            Text(
+                                text = "Toque em qualquer ingrediente para ver suas propriedades, indicações, dosagens e modo de preparo:",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            activeIngredients.forEach { ing ->
+                                Surface(
+                                    onClick = {
+                                        selectedIngredientForInfo = IngredientKnowledgeBase.getInfo(ing)
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = ing,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "Ver detalhes",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showIngredientsListDialog = false }) {
+                        Text("Fechar")
+                    }
+                }
+            )
+        }
+
+        // Dialog for displaying detailed info about a selected ingredient
+        selectedIngredientForInfo?.let { info ->
+            AlertDialog(
+                onDismissRequest = { selectedIngredientForInfo = null },
+                title = { Text(text = info.name, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                            Text(
+                                text = info.category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(4.dp)
+                            )
+                        }
+
+                        HorizontalDivider()
+
+                        Text(text = "💡 Propriedades:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.properties, style = MaterialTheme.typography.bodySmall)
+
+                        Text(text = "🎯 Indicações e Benefícios:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.indications, style = MaterialTheme.typography.bodySmall)
+
+                        Text(text = "🥄 Dosagem Recomendada:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.dosage, style = MaterialTheme.typography.bodySmall)
+
+                        Text(text = "🥣 Modo de Preparo e Uso:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.preparationAndUse, style = MaterialTheme.typography.bodySmall)
+
+                        Text(text = "⏰ Cronobiologia & Timing:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.chronobiology, style = MaterialTheme.typography.bodySmall)
+
+                        Text(text = "⚠️ Precauções & Informações:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = info.precautions, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { selectedIngredientForInfo = null }) {
+                        Text("Entendi")
+                    }
+                }
+            )
         }
 
         // Dialog for adding ingredient with Chronobiology analysis
@@ -472,11 +592,12 @@ fun RecommendationItemRow(
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = when {
-                recommendation.isCompleted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                isCurrent -> MaterialTheme.colorScheme.surfaceVariant
-                else -> MaterialTheme.colorScheme.surface
-            }
+            containerColor = if (recommendation.isCompleted)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            else if (isCurrent)
+                MaterialTheme.colorScheme.surfaceVariant
+            else
+                MaterialTheme.colorScheme.surface
         ),
         border = if (isCurrent) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(12.dp),
