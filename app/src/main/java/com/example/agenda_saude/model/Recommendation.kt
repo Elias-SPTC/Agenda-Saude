@@ -9,5 +9,6 @@ data class Recommendation(
     val startHour: Int,
     val endHour: Int,
     val isCompleted: Boolean = false,
+    val completedDate: String? = null,
     val components: List<String> = emptyList()
 )

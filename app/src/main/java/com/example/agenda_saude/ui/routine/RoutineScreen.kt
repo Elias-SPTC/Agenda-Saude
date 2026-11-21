@@ -8,8 +8,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -55,7 +57,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
     var showAddDialog by remember { mutableStateOf(false) }
     var ingredientInput by remember { mutableStateOf("") }
 
-    var showRemoveIngredientDialog by remember { mutableStateOf(false) }
     var showIngredientsListDialog by remember { mutableStateOf(false) }
     var selectedIngredientForInfo by remember { mutableStateOf<IngredientInfo?>(null) }
 
@@ -105,20 +106,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Adicionar Ingrediente") },
-                            onClick = {
-                                showMenu = false
-                                showAddDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Eliminar Ingrediente") },
-                            onClick = {
-                                showMenu = false
-                                showRemoveIngredientDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
                             text = { Text("Atualizar Plano") },
                             onClick = {
                                 showMenu = false
@@ -148,6 +135,7 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
             )
         }
     ) { innerPadding ->
+        // Filter out recommendations whose components are ALL temporarily removed (momentarily hidden)
         val visibleRecommendations = recommendations.filter { rec ->
             val visibleComps = rec.components.filter { it !in (tempRemovedMap[rec.id] ?: emptySet()) }
             rec.components.isEmpty() || visibleComps.isNotEmpty()
@@ -165,6 +153,7 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
+            // Current Recommendation Banner / Card
             if (currentRecommendation != null && currentVisible.isNotEmpty()) {
                 item(key = "current_${currentRecommendation.id}") {
                     CurrentRecommendationCard(
@@ -195,9 +184,9 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
             }
         }
 
-        // Dialog for Ingredients Catalog / Knowledge Base List
+        // Central Dialog for Ingredients List (Alphabetical, Info, Delete, Add Button)
         if (showIngredientsListDialog) {
-            val activeIngredients = viewModel.getAllActiveIngredients()
+            val activeIngredients = viewModel.getAllActiveIngredients().sortedBy { it.lowercase() }
             AlertDialog(
                 onDismissRequest = { showIngredientsListDialog = false },
                 title = { Text("Lista de Ingredientes Ativos") },
@@ -205,15 +194,15 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 350.dp)
+                            .heightIn(max = 380.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
                         if (activeIngredients.isEmpty()) {
                             Text("Não há ingredientes ativos no plano atual.", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             Text(
-                                text = "Toque em qualquer ingrediente para ver suas propriedades, indicações, dosagens e modo de preparo:",
-                                style = MaterialTheme.typography.bodyMedium
+                                text = "Ordem alfabética. Toque no nome para informações detalhadas ou na lixeira para eliminar do plano:",
+                                style = MaterialTheme.typography.bodySmall
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             activeIngredients.forEach { ing ->
@@ -222,26 +211,43 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                                         selectedIngredientForInfo = IngredientKnowledgeBase.getInfo(ing)
                                     },
                                     shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 4.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = ing,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = "Ver detalhes",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "Informações",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = ing,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.removeIngredient(ing) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Eliminar $ing",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -249,6 +255,21 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                     }
                 },
                 confirmButton = {
+                    Button(
+                        onClick = {
+                            showAddDialog = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Adicionar Ingrediente")
+                    }
+                },
+                dismissButton = {
                     TextButton(onClick = { showIngredientsListDialog = false }) {
                         Text("Fechar")
                     }
@@ -265,9 +286,9 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 400.dp)
+                            .heightIn(max = 420.dp)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                             Text(
@@ -280,7 +301,7 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
 
                         HorizontalDivider()
 
-                        Text(text = "💡 Propriedades:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = "💡 Propriedades Metabólicas:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                         Text(text = info.properties, style = MaterialTheme.typography.bodySmall)
 
                         Text(text = "🎯 Indicações e Benefícios:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
@@ -295,7 +316,7 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                         Text(text = "⏰ Cronobiologia & Timing:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                         Text(text = info.chronobiology, style = MaterialTheme.typography.bodySmall)
 
-                        Text(text = "⚠️ Precauções & Informações:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(text = "⚠️ Precauções & Alertas:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                         Text(text = info.precautions, style = MaterialTheme.typography.bodySmall)
                     }
                 },
@@ -345,60 +366,6 @@ fun RoutineScreen(viewModel: RoutineViewModel = viewModel()) {
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false }) {
                         Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-        // Dialog for eliminating specific ingredients permanently (via top menu)
-        if (showRemoveIngredientDialog) {
-            val activeIngredients = viewModel.getAllActiveIngredients()
-            AlertDialog(
-                onDismissRequest = { showRemoveIngredientDialog = false },
-                title = { Text("Eliminar Ingrediente") },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 350.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        if (activeIngredients.isEmpty()) {
-                            Text("Não há ingredientes ativos no momento.", style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Text(
-                                text = "Selecione o ingrediente que deseja eliminar de forma definitiva do plano global:",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            activeIngredients.forEach { ing ->
-                                Surface(
-                                    onClick = {
-                                        viewModel.removeIngredient(ing)
-                                        showRemoveIngredientDialog = false
-                                    },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(text = ing, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                                        Icon(imageVector = Icons.Default.Close, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.onErrorContainer)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showRemoveIngredientDialog = false }) {
-                        Text("Fechar")
                     }
                 }
             )

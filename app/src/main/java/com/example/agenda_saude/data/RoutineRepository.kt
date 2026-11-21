@@ -6,13 +6,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStreamReader
+import java.time.LocalDate
 import java.util.Locale
 
 object RoutineRepository {
 
     private const val SAVED_PLAN_FILENAME = "saved_routine_plan.json"
 
-    // Sorted by length descending so compound keywords match before sub-words
     private val knownKeywords = listOf(
         "vinagre de maçã", "cominho negro", "açafrão-da-terra",
         "pimenta-do-reino", "oleaginosas", "sopa de legumes", "iogurte natural",
@@ -39,9 +39,6 @@ object RoutineRepository {
         return found.toList()
     }
 
-    /**
-     * Sanitizes any orphaned/truncated phrases in loaded descriptions.
-     */
     fun sanitizeLoadedDescription(description: String): String {
         var desc = description
         desc = desc.replace(Regex("(?i)\\bInclui(\\s+[A-Za-zÀ-ú0-9_\\-]+)*(\\s+para otimização metabólica\\.?)?"), "").trim()
@@ -135,12 +132,27 @@ object RoutineRepository {
             try {
                 val jsonString = localFile.readText()
                 val parsed = parseJsonRecommendations(jsonString)
-                if (parsed.isNotEmpty()) return parsed
+                if (parsed.isNotEmpty()) return checkAndResetOutdatedCompletions(context, parsed)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
         return loadRecommendationsFromAssets(context)
+    }
+
+    private fun checkAndResetOutdatedCompletions(context: Context, list: List<Recommendation>): List<Recommendation> {
+        val todayStr = LocalDate.now().toString()
+        var modified = false
+        val resetList = list.map { rec ->
+            if (rec.isCompleted && rec.completedDate != null && rec.completedDate != todayStr) {
+                modified = true
+                rec.copy(isCompleted = false, completedDate = null)
+            } else rec
+        }
+        if (modified) {
+            saveRecommendations(context, resetList)
+        }
+        return resetList
     }
 
     fun saveRecommendations(context: Context, recommendations: List<Recommendation>) {
@@ -156,6 +168,9 @@ object RoutineRepository {
                     put("startHour", rec.startHour)
                     put("endHour", rec.endHour)
                     put("isCompleted", rec.isCompleted)
+                    if (rec.completedDate != null) {
+                        put("completedDate", rec.completedDate)
+                    }
                     val compArr = JSONArray()
                     rec.components.forEach { compArr.put(it) }
                     put("components", compArr)
@@ -206,8 +221,6 @@ object RoutineRepository {
                     }
                 }
 
-                // If loading saved user plan state, explicit components array in JSON is the absolute authority.
-                // Do NOT re-run keyword extractor on text which would resurrect eliminated ingredients.
                 val finalComponents = if (isSavedUserPlan) {
                     explicit
                 } else {
@@ -227,6 +240,7 @@ object RoutineRepository {
                         startHour = obj.getInt("startHour"),
                         endHour = obj.getInt("endHour"),
                         isCompleted = obj.optBoolean("isCompleted", false),
+                        completedDate = if (obj.has("completedDate") && !obj.isNull("completedDate")) obj.getString("completedDate") else null,
                         components = finalComponents
                     )
                 )
@@ -285,6 +299,7 @@ object RoutineRepository {
                     startHour = startHour,
                     endHour = endHour,
                     isCompleted = false,
+                    completedDate = null,
                     components = extractedComponents
                 )
             )

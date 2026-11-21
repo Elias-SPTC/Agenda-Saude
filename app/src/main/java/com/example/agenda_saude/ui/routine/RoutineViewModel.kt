@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.time.LocalDate
 import java.time.LocalTime
 import java.util.Locale
 
@@ -30,10 +31,18 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         _errorMessage.value = null
     }
 
+    /**
+     * Alterna a conclusão registrando a data do dia de hoje (YYYY-MM-DD).
+     */
     fun toggleCompletion(id: String) {
+        val todayStr = LocalDate.now().toString()
         _recommendations.update { list ->
             val updated = list.map { item ->
-                if (item.id == id) item.copy(isCompleted = !item.isCompleted) else item
+                if (item.id == id) {
+                    val newCompleted = !item.isCompleted
+                    val newDate = if (newCompleted) todayStr else null
+                    item.copy(isCompleted = newCompleted, completedDate = newDate)
+                } else item
             }
             RoutineRepository.saveRecommendations(getApplication(), updated)
             updated
@@ -70,7 +79,6 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 if (item.category.contains(targetCategory, ignoreCase = true) || item.title.contains(targetCategory, ignoreCase = true)) {
                     if (!item.components.contains(formattedName)) {
                         val updatedComponents = item.components + formattedName
-                        // Synthesize coherent description dynamically based on active ingredients and chronobiology
                         val updatedDescription = RoutineAiSynthesizer.synthesizeDescription(item.title, updatedComponents)
                         item.copy(components = updatedComponents, description = updatedDescription)
                     } else {
@@ -132,16 +140,10 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         return ingredients.toList()
     }
 
-    /**
-     * Salva/atualiza o plano com os ingredientes e estado atual.
-     */
     fun updatePlan() {
         RoutineRepository.saveRecommendations(getApplication(), _recommendations.value)
     }
 
-    /**
-     * Retorna ao plano padrão (hardcoded/assets).
-     */
     fun restoreDefaultPlan() {
         RoutineRepository.clearSavedRecommendations(getApplication())
         _recommendations.value = RoutineRepository.loadRecommendationsFromAssets(getApplication())
